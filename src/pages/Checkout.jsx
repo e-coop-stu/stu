@@ -1,0 +1,1 @@
+export default function Checkout(){ return <div style={{padding:20}}>預訂完成頁（占位）</div> }
