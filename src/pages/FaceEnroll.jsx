@@ -1,4 +1,4 @@
-
+// src/pages/FaceEnroll.jsx
 import React, { useState } from "react";
 import { auth, storage, db } from "../lib/firebase";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -10,43 +10,101 @@ export default function FaceEnroll() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
 
+  // 選取照片
   function onPick(e) {
     const f = e.target.files?.[0];
     if (!f) return;
+
+    if (!f.type.startsWith("image/")) {
+      setMsg("❌ 請選擇圖片檔案（jpg / png）");
+      return;
+    }
+
     setFile(f);
     setPreview(URL.createObjectURL(f));
     setMsg("");
   }
 
+  // 上傳
   async function onUpload() {
-    if (!auth.currentUser) return setMsg("請先登入");
-    if (!file) return setMsg("請先選擇照片");
-    setBusy(true); setMsg("");
+    if (!auth.currentUser) {
+      setMsg("❌ 請先登入帳號後才能註冊 Face ID");
+      return;
+    }
+    if (!file) {
+      setMsg("❌ 請先選擇照片");
+      return;
+    }
+
+    setBusy(true);
+    setMsg("");
+
     try {
       const uid = auth.currentUser.uid;
-      const path = `faces/${uid}/enroll-${Date.now()}.jpg`;
+      const time = Date.now();
+      const path = `faces/${uid}/enroll-${time}.jpg`;
+
+      // 上傳到 storage
       const r = ref(storage, path);
       await uploadBytes(r, file);
+
+      // 取得 URL
       const url = await getDownloadURL(r);
-      await setDoc(doc(db, "face_enrollments", `${uid}-${Date.now()}`), {
-        uid, storagePath: path, url, status: "pending", createdAt: serverTimestamp()
+
+      // Firestore 建立一筆 pending 記錄
+      await setDoc(doc(db, "face_enrollments", `${uid}-${time}`), {
+        uid,
+        storagePath: path,
+        url,
+        status: "pending",     // 之後樹莓派把 pending → ready
+        createdAt: serverTimestamp(),
       });
-      setMsg("✅ 已送出！請由樹莓派處理成 ready 後即可刷臉付款。");
-    } catch (e) {
-      setMsg("上傳失敗：" + (e?.message || String(e)));
-    } finally { setBusy(false); }
+
+      setMsg("✅ 上傳成功！等待系統訓練完成後即可使用 Face ID。");
+    } catch (err) {
+      console.error(err);
+      setMsg("❌ 上傳失敗：" + err.message);
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
     <div>
-      <h1>上傳 Face ID</h1>
-      <p className="muted">上傳清晰正臉照片，送出後會建立一筆待處理的入庫申請。</p>
+      <h1>Face ID 註冊</h1>
+
+      <p className="muted">
+        上傳一張清楚的正臉照片供系統訓練。註冊後即可使用 Face ID 消費。
+      </p>
+
+      {/* 選照片 */}
       <input type="file" accept="image/*" onChange={onPick} />
-      {preview && <img src={preview} alt="預覽" style={{ width:"100%", maxWidth:420, borderRadius:12, border:"1px solid var(--border)", marginTop:10 }} />}
-      <div style={{ marginTop:12, display:"flex", gap:8 }}>
-        <button className="btn primary" onClick={onUpload} disabled={busy || !file}>{busy?"處理中…":"上傳並送出"}</button>
-      </div>
-      {msg && <div style={{ marginTop:12 }}>{msg}</div>}
+
+      {preview && (
+        <img
+          src={preview}
+          alt="preview"
+          style={{
+            width: "100%",
+            maxWidth: 400,
+            marginTop: 12,
+            borderRadius: 12,
+            border: "1px solid #ccc",
+          }}
+        />
+      )}
+
+      {/* 按鈕 */}
+      <button
+        className="btn primary"
+        disabled={busy || !file}
+        onClick={onUpload}
+        style={{ marginTop: 12 }}
+      >
+        {busy ? "處理中…" : "上傳 Face ID"}
+      </button>
+
+      {msg && <div style={{ marginTop: 12 }}>{msg}</div>}
     </div>
   );
 }

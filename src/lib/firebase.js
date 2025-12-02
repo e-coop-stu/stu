@@ -3,27 +3,27 @@ import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
+// 如果你真的有要用 Analytics 再開這行
+// import { getAnalytics } from "firebase/analytics";
 
-// 🔥 用 Firebase Console 上的資料，但我們自己修正 storageBucket & apiKey
 const firebaseConfig = {
-  // 👇 請確認這一行跟 Firebase Console 的 apiKey 一模一樣
-  apiKey: "AIzaSyCA3JFCqMW_CwpdkWRE_kv8XrYKD1QhU08",
+  apiKey: "AIzaSyCA3JFCqMW_CwpdkWRE_kv8XrYKDlQhU08",   // ← 完全照 Firebase Console
   authDomain: "shop-f387d.firebaseapp.com",
   projectId: "shop-f387d",
-
-  // ‼️ 這個不要用 console 給的 firebasestorage.app
-  // ‼️ 一定要改成 appspot.com 才能正常配合 Auth / Firestore
-  storageBucket: "shop-f387d.appspot.com",
-
+  storageBucket: "shop-f387d.firebasestorage.app",
   messagingSenderId: "484766516898",
-  appId: "1:484766516898:web:8a824617a7d4dee6841b9fb",
-  measurementId: "G-S94H7MR8G0",
+  appId: "1:484766516898:web:8a82461a7d4dee6841b9fb",
+  measurementId: "G-S94H7MR8G0"
 };
 
-// 初始化 Firebase
+// 初始化 app
 const app = initializeApp(firebaseConfig);
 
 // 匯出給整個專案用
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
+
+// 如果真的需要 Analytics 再加這兩行（目前不用也沒關係）
+// const analytics = getAnalytics(app);
+// export { analytics };

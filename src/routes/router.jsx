@@ -1,4 +1,4 @@
-
+// src/routes/router.jsx
 import React from "react";
 import { createHashRouter } from "react-router-dom";
 
@@ -10,15 +10,48 @@ import FaceEnroll from "../pages/FaceEnroll";
 import { RequireAuth } from "../context/AuthContext";
 
 export const router = createHashRouter([
-  { path: "/login", element: <Login /> },
+  // 登入頁（不放在 Layout）
+  { 
+    path: "/login", 
+    element: <Login /> 
+  },
+
+  // 主框架（Layout 內含選單 / header）
   {
     path: "/",
     element: <Layout />,
     children: [
-      { index: true, element: <Shop /> },
-      { path: "cart", element: <RequireAuth><Cart /></RequireAuth> },
-      { path: "face-enroll", element: <RequireAuth><FaceEnroll /></RequireAuth> },
-    ]
+      // / → Shop
+      { 
+        index: true, 
+        element: <Shop /> 
+      },
+
+      // /cart → 購物車（要登入）
+      { 
+        path: "cart", 
+        element: (
+          <RequireAuth>
+            <Cart />
+          </RequireAuth>
+        ) 
+      },
+
+      // /face-enroll → Face ID 註冊（要登入）
+      { 
+        path: "face-enroll", 
+        element: (
+          <RequireAuth>
+            <FaceEnroll />
+          </RequireAuth>
+        ) 
+      },
+    ],
   },
-  { path: "*", element: <div style={{ padding:20 }}>404 找不到此頁</div> }
+
+  // 404
+  { 
+    path: "*", 
+    element: <div style={{ padding: 20 }}>404 找不到此頁</div> 
+  },
 ]);
