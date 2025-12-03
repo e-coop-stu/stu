@@ -1,18 +1,300 @@
+/* ===== 全站基礎設定 ===== */
+:root {
+  --bg: #f4f6fb;
+  --bg-elevated: #ffffff;
+  --border: #e2e8f0;
+  --text: #111827;
+  --text-muted: #6b7280;
+  --primary: #16a34a;      /* 主色：綠色（很像合作社感覺） */
+  --primary-soft: #dcfce7;
+  --danger: #dc2626;
+  --radius-lg: 16px;
+  --radius-md: 10px;
+  --shadow-soft: 0 10px 30px rgba(15, 23, 42, 0.08);
+  --nav-height: 60px;
+}
 
-:root { --brand: #0ea567; --muted:#64748b; --border:#e5e7eb; }
-*{ box-sizing: border-box; }
-html,body,#root{ height:100%; }
-body{ margin:0; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans", "Helvetica Neue", Arial; color:#0f172a; background:#fff; }
-a{ color:#2563eb; text-decoration: none; }
-button{ cursor:pointer; }
-.container{ max-width:1100px; margin:0 auto; padding:20px; }
-.nav{ display:flex; gap:12px; padding:12px 20px; border-bottom:1px solid var(--border); }
-.nav a{ padding:8px 10px; border-radius:10px; }
-.nav a.active{ background:#f1f5f9; }
-.card{ background:#fff; border:1px solid var(--border); border-radius:14px; padding:14px; box-shadow:0 4px 20px rgba(0,0,0,.03); }
-.btn{ padding:10px 12px; border:0; border-radius:10px; font-weight:700; }
-.btn.primary{ background:var(--brand); color:#fff; }
-.btn.ghost{ background:#fff; color:#0f172a; border:1px solid var(--border); }
-.price{ font-weight:700; }
-.muted{ color:var(--muted); }
-.grid{ display:grid; grid-template-columns: repeat(auto-fill,minmax(260px,1fr)); gap:16px; }
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+    "Segoe UI", sans-serif;
+  background: radial-gradient(circle at top, #e0f2fe 0, #f4f6fb 40%, #f4f6fb 100%);
+  color: var(--text);
+}
+
+/* 讓整個 app 有一點居中、上面留空間 */
+#root {
+  display: flex;
+  justify-content: center;
+  padding: 32px 16px;
+}
+
+/* ===== 外框：讓整個網站像一個卡片 ===== */
+.app-shell {
+  width: 100%;
+  max-width: 1120px;
+  min-height: calc(100vh - 64px);
+  background: rgba(255, 255, 255, 0.86);
+  border-radius: 24px;
+  backdrop-filter: blur(12px);
+  box-shadow: var(--shadow-soft);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ===== 導覽列 ===== */
+.nav {
+  height: var(--nav-height);
+  padding: 0 24px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: linear-gradient(to right, #ffffffdd, #f9fafbdd);
+  backdrop-filter: blur(10px);
+}
+
+.nav a {
+  font-size: 15px;
+  color: var(--text-muted);
+}
+
+/* NavLink active 狀態會由 inline style 設定背景，我們補文字顏色 */
+.nav a[style*="background"] {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* 右側區塊 */
+.nav .muted {
+  font-size: 14px;
+}
+
+/* ===== 內容容器 ===== */
+main.container {
+  padding: 24px 24px 28px;
+}
+
+/* 手機縮小一點 padding */
+@media (max-width: 720px) {
+  .app-shell {
+    border-radius: 18px;
+  }
+
+  main.container {
+    padding: 18px 14px 20px;
+  }
+
+  .nav {
+    padding: 0 14px;
+    gap: 8px;
+  }
+}
+
+/* ===== 卡片共用樣式（登入 / Face ID / 訂單資訊等等） ===== */
+.card {
+  background: var(--bg-elevated);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.04);
+  padding: 20px 22px;
+}
+
+.card h1,
+.card h2 {
+  margin-top: 0;
+  margin-bottom: 8px;
+}
+
+.card h1 {
+  font-size: 26px;
+  letter-spacing: 0.02em;
+}
+
+.card h2 {
+  font-size: 20px;
+}
+
+/* ===== 表單元件（登入、FaceEnroll） ===== */
+input,
+select,
+textarea {
+  font: inherit;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  padding: 10px 12px;
+  outline: none;
+  background: #f9fafb;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--primary);
+  background: #ffffff;
+  box-shadow: 0 0 0 1px var(--primary-soft);
+}
+
+input::placeholder {
+  color: var(--text-muted);
+}
+
+/* ===== 按鈕 ===== */
+.btn {
+  border-radius: 999px;
+  border: 1px solid transparent;
+  padding: 8px 16px;
+  font-size: 14px;
+  cursor: pointer;
+  background: #e5e7eb;
+  color: #111827;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.05s,
+    border-color 0.15s ease;
+}
+
+.btn.primary {
+  background: linear-gradient(135deg, #16a34a, #22c55e);
+  color: white;
+  box-shadow: 0 10px 25px rgba(22, 163, 74, 0.35);
+}
+
+.btn.ghost {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+
+.btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+}
+
+.btn.ghost:hover:not(:disabled) {
+  background: #f3f4f6;
+  box-shadow: none;
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+  box-shadow: none;
+  transform: none;
+}
+
+/* ===== 小文字 / 狀態文字 ===== */
+.muted {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+/* 錯誤或警告文字 */
+.text-error {
+  color: var(--danger);
+  font-size: 14px;
+}
+
+/* ===== FaceEnroll 上傳圖片預覽 ===== */
+.face-preview {
+  width: 100%;
+  max-width: 420px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  margin-top: 12px;
+  object-fit: cover;
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.12);
+}
+
+/* ===== 商品頁（大致樣式，對現有結構不會有副作用） ===== */
+.product-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 18px;
+}
+
+.product-card {
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  padding: 16px 18px 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.03);
+  transition: transform 0.08s ease, box-shadow 0.08s ease, border-color 0.08s;
+}
+
+.product-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.08);
+  border-color: #cbd5f5;
+}
+
+.product-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.product-meta {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.product-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.product-price {
+  font-weight: 700;
+  color: var(--primary);
+}
+
+/* ===== 購物車列表 ===== */
+.cart-card {
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  background: #ffffff;
+}
+
+.cart-row {
+  display: grid;
+  grid-template-columns: 1.5fr 90px 110px 90px;
+  gap: 12px;
+  align-items: center;
+}
+
+@media (max-width: 640px) {
+  .cart-row {
+    grid-template-columns: 1.3fr 70px 1fr;
+    grid-template-rows: auto auto;
+  }
+}
+
+/* ===== 簡單的區塊標題 ===== */
+.section-title {
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}

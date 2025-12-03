@@ -15,48 +15,115 @@ import {
   signOut,
   onAuthStateChanged,
 } from "firebase/auth";
-import { auth } from "../lib/firebase";
+import { auth, db } from "../lib/firebase";
+import {
+  doc,
+  getDoc,
+  setDoc,
+  serverTimestamp,
+} from "firebase/firestore";
 
 const AuthContext = createContext(null);
 
+// 🔹 取得 / 建立 students/{uid} 的學生資料（含餘額）
+async function ensureStudentDoc(user) {
+  if (!user) return null;
+
+  const ref = doc(db, "students", user.uid);
+  const snap = await getDoc(ref);
+
+  if (!snap.exists()) {
+    const data = {
+      email: user.email || "",
+      balance: 0,              // 這裡是初始餘額，之後你可以改成別的數字
+      createdAt: serverTimestamp(),
+    };
+    await setDoc(ref, data);
+    return { id: ref.id, ...data };
+  }
+
+  return { id: snap.id, ...snap.data() };
+}
+
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(null);        // Firebase Auth 使用者
+  const [student, setStudent] = useState(null);  // Firestore students/{uid} 資料（含 balance）
   const [initializing, setInitializing] = useState(true);
 
   // 監聽登入狀態 + 處理 Redirect 結果
   useEffect(() => {
     // 處理 Google redirect 登入（Safari 之類）
-    getRedirectResult(auth)
-      .then(() => {
-        // 只要成功會自動觸發 onAuthStateChanged
-      })
-      .catch((e) => {
+    getRedirectResult(auth).catch((e) => {
+      // 沒有 redirect event 也會丟錯，直接忽略就好
+      if (e?.code !== "auth/no-auth-event") {
         console.warn("[Auth] redirect result error:", e);
-      });
+      }
+    });
 
     const unsub = onAuthStateChanged(auth, (u) => {
-      setUser(u || null);
-      setInitializing(false);
+      // 這裡用 async IIFE 方便等 student 載完再把 initializing 設成 false
+      (async () => {
+        setUser(u || null);
+
+        if (u) {
+          try {
+            const stu = await ensureStudentDoc(u);
+            setStudent(stu);
+          } catch (err) {
+            console.warn("[Auth] load student doc error:", err);
+            setStudent(null);
+          }
+        } else {
+          setStudent(null);
+        }
+
+        setInitializing(false);
+      })();
     });
 
     return () => unsub();
   }, []);
 
+  // ✅ 專門手動重新抓一次 students/{uid}（之後如果有「儲值」功能可以呼叫這個）
+  async function refreshStudent() {
+    if (!user) {
+      setStudent(null);
+      return null;
+    }
+    const stu = await ensureStudentDoc(user);
+    setStudent(stu);
+    return stu;
+  }
+
   // 帳號密碼註冊
   async function signup(email, password) {
     const cred = await createUserWithEmailAndPassword(auth, email, password);
-    return cred.user;
+    const u = cred.user;
+    setUser(u);
+
+    const stu = await ensureStudentDoc(u);
+    setStudent(stu);
+
+    return u;
   }
 
   // 帳號密碼登入
   async function login(email, password) {
     const cred = await signInWithEmailAndPassword(auth, email, password);
-    return cred.user;
+    const u = cred.user;
+    setUser(u);
+
+    const stu = await ensureStudentDoc(u);
+    setStudent(stu);
+
+    return u;
   }
 
   // 登出
   async function logout() {
     await signOut(auth);
+    setUser(null);
+    setStudent(null);
   }
 
   // Google 登入（先 popup，失敗再改 redirect）
@@ -65,9 +132,14 @@ export function AuthProvider({ children }) {
 
     try {
       const cred = await signInWithPopup(auth, provider);
-      return cred.user;
+      const u = cred.user;
+      setUser(u);
+
+      const stu = await ensureStudentDoc(u);
+      setStudent(stu);
+
+      return u;
     } catch (e) {
-      // Safari / 被擋 popup → 改走 redirect 流程
       const popupIssues = [
         "auth/operation-not-supported-in-this-environment",
         "auth/popup-blocked",
@@ -75,23 +147,24 @@ export function AuthProvider({ children }) {
       ];
 
       if (popupIssues.includes(e?.code)) {
+        // 走 redirect 流程，之後會重新載入 → onAuthStateChanged 自己會處理
         await signInWithRedirect(auth, provider);
-        // 之後會重新載入頁面 → onAuthStateChanged 會把 user 塞進來
         return;
       }
 
-      // 其他錯誤丟回去讓畫面顯示
       throw e;
     }
   }
 
   const value = {
-    user,
+    user,           // Firebase 使用者
+    student,        // Firestore 的學生資料（balance 在這裡）
     initializing,
     signup,
     login,
     logout,
     loginWithGoogle,
+    refreshStudent, // 之後如果餘額被合作社端改了，可以呼叫它重新抓資料
   };
 
   return (
@@ -109,6 +182,7 @@ export function useAuth() {
   return ctx;
 }
 
+// 路由保護：沒登入就跳轉到 /login
 import { Navigate } from "react-router-dom";
 
 export function RequireAuth({ children }) {

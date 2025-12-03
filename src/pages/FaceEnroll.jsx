@@ -56,55 +56,112 @@ export default function FaceEnroll() {
         uid,
         storagePath: path,
         url,
-        status: "pending",     // 之後樹莓派把 pending → ready
+        status: "pending", // 之後樹莓派把 pending → ready
         createdAt: serverTimestamp(),
       });
 
-      setMsg("✅ 上傳成功！等待系統訓練完成後即可使用 Face ID。");
+      setMsg("✅ 上傳成功！等待系統訓練完成後即可使用 Face ID 消費。");
+      // 上傳完成後可以清除檔案或保留預覽，看你習慣
+      // setFile(null);
+      // setPreview("");
     } catch (err) {
       console.error(err);
-      setMsg("❌ 上傳失敗：" + err.message);
+      setMsg("❌ 上傳失敗：" + (err.message || String(err)));
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <div>
-      <h1>Face ID 註冊</h1>
-
-      <p className="muted">
-        上傳一張清楚的正臉照片供系統訓練。註冊後即可使用 Face ID 消費。
+    <div className="card" style={{ maxWidth: 560, margin: "0 auto" }}>
+      <h1 className="section-title" style={{ marginBottom: 4 }}>
+        Face ID 註冊
+      </h1>
+      <p className="muted" style={{ marginTop: 0, marginBottom: 16 }}>
+        上傳一張清楚、正面的臉部照片，系統訓練完成後，就可以在合作社使用 Face ID 付款。
       </p>
 
-      {/* 選照片 */}
-      <input type="file" accept="image/*" onChange={onPick} />
+      {/* 小提示區塊 */}
+      <div
+        style={{
+          padding: "10px 12px",
+          borderRadius: 12,
+          background: "var(--primary-soft)",
+          fontSize: 13,
+          marginBottom: 16,
+        }}
+      >
+        📷 <b>拍攝小提示：</b>
+        <ul style={{ margin: "6px 0 0 18px", padding: 0 }}>
+          <li>請正對鏡頭，臉部置中。</li>
+          <li>拿下口罩、帽子，避免頭髮遮住五官。</li>
+          <li>光線充足、不要太背光。</li>
+        </ul>
+      </div>
 
-      {preview && (
-        <img
-          src={preview}
-          alt="preview"
-          style={{
-            width: "100%",
-            maxWidth: 400,
-            marginTop: 12,
-            borderRadius: 12,
-            border: "1px solid #ccc",
-          }}
+      {/* 步驟 1：選照片 */}
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>
+          1. 選擇要上傳的照片
+        </div>
+        <input
+          type="file"
+          accept="image/*"
+          onChange={onPick}
         />
+      </div>
+
+      {/* 預覽圖片 */}
+      {preview && (
+        <div style={{ marginTop: 10, marginBottom: 14 }}>
+          <div
+            className="muted"
+            style={{ fontSize: 13, marginBottom: 6 }}
+          >
+            預覽：
+          </div>
+          <img
+            src={preview}
+            alt="Face preview"
+            className="face-preview"
+          />
+        </div>
       )}
 
-      {/* 按鈕 */}
-      <button
-        className="btn primary"
-        disabled={busy || !file}
-        onClick={onUpload}
-        style={{ marginTop: 12 }}
-      >
-        {busy ? "處理中…" : "上傳 Face ID"}
-      </button>
+      {/* 步驟 2：上傳 */}
+      <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
+        <button
+          className="btn primary"
+          disabled={busy || !file}
+          onClick={onUpload}
+        >
+          {busy ? "處理中…" : "上傳並送出註冊"}
+        </button>
+        <button
+          className="btn ghost"
+          type="button"
+          onClick={() => {
+            setFile(null);
+            setPreview("");
+            setMsg("");
+          }}
+        >
+          清除選擇
+        </button>
+      </div>
 
-      {msg && <div style={{ marginTop: 12 }}>{msg}</div>}
+      {/* 訊息顯示 */}
+      {msg && (
+        <div
+          style={{
+            marginTop: 12,
+            fontSize: 14,
+          }}
+          className={msg.startsWith("✅") ? "" : "text-error"}
+        >
+          {msg}
+        </div>
+      )}
     </div>
   );
 }

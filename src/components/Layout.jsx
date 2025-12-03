@@ -1,38 +1,46 @@
+// src/components/Layout.jsx
 import React from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 export default function Layout() {
-  const { user, logout } = useAuth();
+  const { user, student, logout } = useAuth();
 
-  const link = { 
-    padding: "8px 10px", 
-    borderRadius: 8, 
+  const link = {
+    padding: "8px 10px",
+    borderRadius: 8,
     textDecoration: "none",
-    color: "#0f172a",
-    fontWeight: 500
   };
 
   const active = ({ isActive }) =>
-    isActive
-      ? { ...link, background: "#f1f5f9" }
-      : link;
+    isActive ? { ...link, background: "#f1f5f9" } : link;
 
   return (
     <div>
-      <header className="nav" style={{ display: "flex", gap: 12, padding: 12 }}>
-        {/* 左側導覽列 */}
+      <header className="nav">
+
+        {/* 🔹 主選單 */}
         <NavLink to="/" style={active}>商品頁</NavLink>
         <NavLink to="/cart" style={active}>購物車</NavLink>
 
-        {/* ⭐ 新增的 Face ID 註冊按鈕 */}
+        {/* 🔹 Face ID 註冊頁 */}
         <NavLink to="/face-enroll" style={active}>上傳 Face ID</NavLink>
 
-        {/* 右側（登入 / 登出） */}
+        {/* 🔹 右側使用者資訊 */}
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
           {user ? (
             <>
+              {/* 使用者 Email */}
               <span className="muted">{user.email}</span>
+
+              {/* 🔹 顯示餘額 */}
+              {student && (
+                <span className="muted" style={{ fontWeight: 600 }}>
+                  餘額：${student.balance}
+                </span>
+              )}
+
+              {/* 登出按鈕 */}
               <button className="btn ghost" onClick={logout}>登出</button>
             </>
           ) : (
@@ -41,7 +49,6 @@ export default function Layout() {
         </div>
       </header>
 
-      {/* 頁面內容渲染區 */}
       <main className="container">
         <Outlet />
       </main>
