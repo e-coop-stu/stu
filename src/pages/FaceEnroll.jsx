@@ -35,40 +35,47 @@ export default function FaceEnroll() {
   }
 
   // 上傳 Firestore（Base64）
-  async function onUpload() {
-    if (!auth.currentUser) {
-      return setMsg("❌ 請先登入");
-    }
-    if (!file) {
-      return setMsg("❌ 請先選擇照片");
-    }
-
-    setBusy(true);
-    setMsg("");
-
-    try {
-      const uid = auth.currentUser.uid;
-      const time = Date.now();
-
-      // 1. file → base64
-      const base64 = await fileToBase64(file);
-
-      // 2. Firestore 建立文件
-      await setDoc(doc(db, "face_enrollments", `${uid}-${time}`), {
-        uid,
-        base64,               // ← 圖片的 Base64
-        status: "pending",    // 樹莓派處理後會更新
-        createdAt: serverTimestamp(),
-      });
-
-      setMsg("✅ 已送出！等待系統訓練完成。");
-    } catch (err) {
-      console.error(err);
-      setMsg("❌ 上傳失敗：" + err.message);
-    } finally {
-      setBusy(false);
-    }
+  // 上傳 Firestore（Base64）
+async function onUpload() {
+  if (!auth.currentUser) {
+    return setMsg("❌ 請先登入");
   }
+  if (!file) {
+    return setMsg("❌ 請先選擇照片");
+  }
+
+  setBusy(true);
+  setMsg("");
+
+  try {
+    const user = auth.currentUser;
+    const uid = user.uid;
+    const time = Date.now();
+
+    const displayName = user.displayName || "未命名";
+    const email = user.email || "";
+
+    // 1. file → base64
+    const base64 = await fileToBase64(file);
+
+    // 2. Firestore 建立文件
+    await setDoc(doc(db, "face_enrollments", `${uid}-${time}`), {
+      uid,                  // 誰傳的（UID）
+      userName: displayName, // 誰傳的（顯示名稱）
+      userEmail: email,      // 誰傳的（Email）
+      base64,               // 圖片的 Base64
+      status: "pending",
+      createdAt: serverTimestamp(),
+    });
+
+    setMsg("✅ 已送出！等待系統訓練完成。");
+  } catch (err) {
+    console.error(err);
+    setMsg("❌ 上傳失敗：" + err.message);
+  } finally {
+    setBusy(false);
+  }
+}
 
   return (
     <div>
