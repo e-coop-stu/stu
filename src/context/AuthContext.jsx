@@ -7,7 +7,6 @@ import React, {
 } from "react";
 import {
   GoogleAuthProvider,
-  signInWithPopup,
   signInWithRedirect,
   getRedirectResult,
   createUserWithEmailAndPassword,
@@ -35,7 +34,7 @@ async function ensureStudentDoc(user) {
   if (!snap.exists()) {
     const data = {
       email: user.email || "",
-      balance: 0,              // 這裡是初始餘額，之後你可以改成別的數字
+      balance: 0, // 初始餘額
       createdAt: serverTimestamp(),
     };
     await setDoc(ref, data);
@@ -52,7 +51,7 @@ export function AuthProvider({ children }) {
 
   // 監聽登入狀態 + 處理 Redirect 結果
   useEffect(() => {
-    // 處理 Google redirect 登入（Safari 之類）
+    // 處理 Google redirect 登入（Safari / GitHub Pages）
     getRedirectResult(auth).catch((e) => {
       // 沒有 redirect event 也會丟錯，直接忽略就好
       if (e?.code !== "auth/no-auth-event") {
@@ -61,7 +60,6 @@ export function AuthProvider({ children }) {
     });
 
     const unsub = onAuthStateChanged(auth, (u) => {
-      // 這裡用 async IIFE 方便等 student 載完再把 initializing 設成 false
       (async () => {
         setUser(u || null);
 
@@ -126,34 +124,11 @@ export function AuthProvider({ children }) {
     setStudent(null);
   }
 
-  // Google 登入（先 popup，失敗再改 redirect）
+  // 🔹 Google 登入：全部改走 redirect，避免 popup / COOP 問題
   async function loginWithGoogle() {
     const provider = new GoogleAuthProvider();
-
-    try {
-      const cred = await signInWithPopup(auth, provider);
-      const u = cred.user;
-      setUser(u);
-
-      const stu = await ensureStudentDoc(u);
-      setStudent(stu);
-
-      return u;
-    } catch (e) {
-      const popupIssues = [
-        "auth/operation-not-supported-in-this-environment",
-        "auth/popup-blocked",
-        "auth/popup-closed-by-user",
-      ];
-
-      if (popupIssues.includes(e?.code)) {
-        // 走 redirect 流程，之後會重新載入 → onAuthStateChanged 自己會處理
-        await signInWithRedirect(auth, provider);
-        return;
-      }
-
-      throw e;
-    }
+    console.log("[Auth] use Google signInWithRedirect");
+    await signInWithRedirect(auth, provider);
   }
 
   const value = {
