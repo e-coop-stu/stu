@@ -50,37 +50,46 @@ export function AuthProvider({ children }) {
   const [initializing, setInitializing] = useState(true);
 
   // 監聽登入狀態 + 處理 Redirect 結果
-  useEffect(() => {
-    // 處理 Google redirect 登入（Safari / GitHub Pages）
-    getRedirectResult(auth).catch((e) => {
-      // 沒有 redirect event 也會丟錯，直接忽略就好
-      if (e?.code !== "auth/no-auth-event") {
-        console.warn("[Auth] redirect result error:", e);
-      }
-    });
+  // useEffect 裡面這段，改成下面這樣，多加 console.log
+useEffect(() => {
+  console.log("[Auth] useEffect mount");
 
-    const unsub = onAuthStateChanged(auth, (u) => {
-      (async () => {
-        setUser(u || null);
+  getRedirectResult(auth).then((res) => {
+    if (res) {
+      console.log("[Auth] getRedirectResult success:", res.user?.email);
+    } else {
+      console.log("[Auth] getRedirectResult: no redirect result");
+    }
+  }).catch((e) => {
+    if (e?.code !== "auth/no-auth-event") {
+      console.warn("[Auth] redirect result error:", e);
+    }
+  });
 
-        if (u) {
-          try {
-            const stu = await ensureStudentDoc(u);
-            setStudent(stu);
-          } catch (err) {
-            console.warn("[Auth] load student doc error:", err);
-            setStudent(null);
-          }
-        } else {
+  const unsub = onAuthStateChanged(auth, (u) => {
+    console.log("[Auth] onAuthStateChanged user:", u?.email || null);
+
+    (async () => {
+      setUser(u || null);
+
+      if (u) {
+        try {
+          const stu = await ensureStudentDoc(u);
+          setStudent(stu);
+        } catch (err) {
+          console.warn("[Auth] load student doc error:", err);
           setStudent(null);
         }
+      } else {
+        setStudent(null);
+      }
 
-        setInitializing(false);
-      })();
-    });
+      setInitializing(false);
+    })();
+  });
 
-    return () => unsub();
-  }, []);
+  return () => unsub();
+}, []);
 
   // ✅ 專門手動重新抓一次 students/{uid}（之後如果有「儲值」功能可以呼叫這個）
   async function refreshStudent() {
