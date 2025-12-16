@@ -134,10 +134,19 @@ useEffect(() => {
   }
 
   // 🔹 Google 登入：全部改走 redirect，避免 popup / COOP 問題
+  // 🔹 Google 登入：只用 redirect + 把錯誤往外丟，讓畫面可以看到
   async function loginWithGoogle() {
     const provider = new GoogleAuthProvider();
-    console.log("[Auth] use Google signInWithRedirect");
-    await signInWithRedirect(auth, provider);
+
+    try {
+      console.log("[Auth] starting Google signInWithRedirect");
+      await signInWithRedirect(auth, provider);
+      // 這行之後通常不會被執行，因為頁面會直接跳到 Google
+    } catch (e) {
+      console.error("[Auth] Google redirect error:", e);
+      // 把錯誤丟回去讓 Login 頁面顯示
+      throw e;
+    }
   }
 
   const value = {
