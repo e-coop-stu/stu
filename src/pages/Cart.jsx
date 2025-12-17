@@ -9,29 +9,16 @@ export default function Cart() {
   const { user, student } = useAuth();
   const [busy, setBusy] = useState(false);
 
-  // msg 改成物件：好做不同狀態的訊息（error/success）
-  const [msg, setMsg] = useState(null); // { type: "error"|"success", title, lines:[], extra? }
-
-  if (!items.length) {
-    return (
-      <div style={{ padding: 24, textAlign: "center" }}>
-        <h1 style={{ fontSize: 22, marginBottom: 12 }}>購物車</h1>
-        <p className="muted">購物車是空的，回到商品頁逛逛吧！</p>
-      </div>
-    );
-  }
+  // msg 物件：{ type: "error"|"success", title, lines:[], extra? }
+  const [msg, setMsg] = useState(null);
 
   async function onReserve() {
     if (!user) {
-      setMsg({
-        type: "error",
-        title: "請先登入",
-        lines: [],
-      });
+      setMsg({ type: "error", title: "請先登入", lines: [] });
       return;
     }
 
-    // ✅ 餘額不足就擋下來（不呼叫 reserveCart，不清空購物車）
+    // ✅ 餘額不足就擋下來
     if (typeof student?.balance === "number" && student.balance < total) {
       setMsg({
         type: "error",
@@ -54,10 +41,7 @@ export default function Cart() {
         items: items.map((i) => ({ product: i.product, qty: i.qty })),
       });
 
-      // ✅ 清掉 Firebase 購物車（你現在用的是 clearCart）
-      await clearCart();
-
-      // ✅ 成功訊息（你要求的文案）
+      // ✅ 先顯示成功訊息（包含取貨碼）
       setMsg({
         type: "success",
         title: "✅ 已成功預定商品",
@@ -68,9 +52,11 @@ export default function Cart() {
         ],
         extra: `單號：${res.orderId}　｜　保留至：${res.expiresAt.toLocaleString()}`,
       });
+
+      // ✅ 再清空 Firebase 購物車（清空後 items 會變空，但我們空車畫面也會顯示 msg）
+      await clearCart();
     } catch (e) {
       const m = e?.message || String(e);
-      // 讓「餘額不足」更直覺
       if (m.includes("餘額不足")) {
         setMsg({
           type: "error",
@@ -87,6 +73,54 @@ export default function Cart() {
     } finally {
       setBusy(false);
     }
+  }
+
+  // ✅ 共用訊息框
+  const MsgBox = () =>
+    msg ? (
+      <div
+        className="card"
+        style={{
+          marginTop: 12,
+          padding: 12,
+          lineHeight: 1.7,
+          border:
+            msg.type === "success"
+              ? "1px solid rgba(34,197,94,.35)"
+              : "1px solid rgba(239,68,68,.35)",
+        }}
+      >
+        <div style={{ fontWeight: 800, marginBottom: 6 }}>{msg.title}</div>
+        {msg.lines?.map((t, idx) => (
+          <div key={idx} className="muted">
+            {t}
+          </div>
+        ))}
+        {msg.extra && (
+          <div className="muted" style={{ marginTop: 6, fontSize: 13 }}>
+            {msg.extra}
+          </div>
+        )}
+      </div>
+    ) : null;
+
+  // ✅ 空購物車畫面：也要顯示成功/失敗訊息（取貨碼就在這）
+  if (!items.length) {
+    return (
+      <div style={{ maxWidth: 720, margin: "0 auto", padding: 24 }}>
+        <h1 style={{ fontSize: 22, marginBottom: 12, textAlign: "center" }}>
+          購物車
+        </h1>
+
+        <MsgBox />
+
+        {!msg && (
+          <p className="muted" style={{ textAlign: "center" }}>
+            購物車是空的，回到商品頁逛逛吧！
+          </p>
+        )}
+      </div>
+    );
   }
 
   return (
@@ -186,9 +220,7 @@ export default function Cart() {
         }}
       >
         <div>
-          <div style={{ fontSize: 16, fontWeight: 700 }}>
-            總計：NT$ {total}
-          </div>
+          <div style={{ fontSize: 16, fontWeight: 700 }}>總計：NT$ {total}</div>
           {typeof student?.balance === "number" && (
             <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
               預訂後會由合作社端扣款，請確認錢包餘額足夠。
@@ -207,32 +239,7 @@ export default function Cart() {
       </div>
 
       {/* 訊息 */}
-      {msg && (
-        <div
-          className="card"
-          style={{
-            marginTop: 12,
-            padding: 12,
-            lineHeight: 1.7,
-            border:
-              msg.type === "success"
-                ? "1px solid rgba(34,197,94,.35)"
-                : "1px solid rgba(239,68,68,.35)",
-          }}
-        >
-          <div style={{ fontWeight: 700, marginBottom: 6 }}>{msg.title}</div>
-          {msg.lines?.map((t, idx) => (
-            <div key={idx} className="muted">
-              {t}
-            </div>
-          ))}
-          {msg.extra && (
-            <div className="muted" style={{ marginTop: 6, fontSize: 13 }}>
-              {msg.extra}
-            </div>
-          )}
-        </div>
-      )}
+      <MsgBox />
     </div>
   );
 }
