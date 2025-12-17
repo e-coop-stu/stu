@@ -5,10 +5,12 @@ import { useAuth } from "../context/AuthContext";
 import { reserveCart } from "../services/store";
 
 export default function Cart() {
-  const { items, add, dec, remove, clear, total } = useCart();
+  const { items, add, dec, remove, clearCart, total } = useCart();
   const { user, student } = useAuth();
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState("");
+
+  // msg 改成物件：好做不同狀態的訊息（error/success）
+  const [msg, setMsg] = useState(null); // { type: "error"|"success", title, lines:[], extra? }
 
   if (!items.length) {
     return (
@@ -21,23 +23,67 @@ export default function Cart() {
 
   async function onReserve() {
     if (!user) {
-      setMsg("請先登入");
+      setMsg({
+        type: "error",
+        title: "請先登入",
+        lines: [],
+      });
       return;
     }
+
+    // ✅ 餘額不足就擋下來（不呼叫 reserveCart，不清空購物車）
+    if (typeof student?.balance === "number" && student.balance < total) {
+      setMsg({
+        type: "error",
+        title: "❌ 餘額不足",
+        lines: [
+          `目前餘額：NT$ ${student.balance}`,
+          `需要金額：NT$ ${total}`,
+          "請先儲值後再預訂",
+        ],
+      });
+      return;
+    }
+
     setBusy(true);
-    setMsg("");
+    setMsg(null);
 
     try {
       const res = await reserveCart({
         userId: user.uid,
         items: items.map((i) => ({ product: i.product, qty: i.qty })),
       });
-      clear();
-      setMsg(
-        `✅ 已預訂成功！單號 ${res.orderId}（保留至 ${res.expiresAt.toLocaleString()}）`
-      );
+
+      // ✅ 清掉 Firebase 購物車（你現在用的是 clearCart）
+      await clearCart();
+
+      // ✅ 成功訊息（你要求的文案）
+      setMsg({
+        type: "success",
+        title: "✅ 已成功預定商品",
+        lines: [
+          `取貨碼：${res.pickupCode}`,
+          "請於一小時內領取",
+          "若無領取，將自動刪除該商品之預定",
+        ],
+        extra: `單號：${res.orderId}　｜　保留至：${res.expiresAt.toLocaleString()}`,
+      });
     } catch (e) {
-      setMsg("預訂失敗：" + (e?.message || String(e)));
+      const m = e?.message || String(e);
+      // 讓「餘額不足」更直覺
+      if (m.includes("餘額不足")) {
+        setMsg({
+          type: "error",
+          title: "❌ 餘額不足",
+          lines: ["請先儲值後再預訂"],
+        });
+      } else {
+        setMsg({
+          type: "error",
+          title: "預訂失敗",
+          lines: [m],
+        });
+      }
     } finally {
       setBusy(false);
     }
@@ -94,6 +140,7 @@ export default function Cart() {
                 className="btn ghost"
                 onClick={() => dec(i.product.id)}
                 aria-label="decrease"
+                disabled={busy}
               >
                 -
               </button>
@@ -102,6 +149,7 @@ export default function Cart() {
                 className="btn ghost"
                 onClick={() => add(i.product)}
                 aria-label="increase"
+                disabled={busy}
               >
                 +
               </button>
@@ -117,6 +165,7 @@ export default function Cart() {
               className="btn ghost"
               onClick={() => remove(i.product.id)}
               style={{ marginLeft: 4 }}
+              disabled={busy}
             >
               移除
             </button>
@@ -148,14 +197,10 @@ export default function Cart() {
         </div>
 
         <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn ghost" onClick={clear}>
+          <button className="btn ghost" onClick={clearCart} disabled={busy}>
             清空
           </button>
-          <button
-            className="btn primary"
-            onClick={onReserve}
-            disabled={busy}
-          >
+          <button className="btn primary" onClick={onReserve} disabled={busy}>
             {busy ? "處理中…" : "預訂"}
           </button>
         </div>
@@ -163,8 +208,29 @@ export default function Cart() {
 
       {/* 訊息 */}
       {msg && (
-        <div style={{ marginTop: 12 }} className="muted">
-          {msg}
+        <div
+          className="card"
+          style={{
+            marginTop: 12,
+            padding: 12,
+            lineHeight: 1.7,
+            border:
+              msg.type === "success"
+                ? "1px solid rgba(34,197,94,.35)"
+                : "1px solid rgba(239,68,68,.35)",
+          }}
+        >
+          <div style={{ fontWeight: 700, marginBottom: 6 }}>{msg.title}</div>
+          {msg.lines?.map((t, idx) => (
+            <div key={idx} className="muted">
+              {t}
+            </div>
+          ))}
+          {msg.extra && (
+            <div className="muted" style={{ marginTop: 6, fontSize: 13 }}>
+              {msg.extra}
+            </div>
+          )}
         </div>
       )}
     </div>
