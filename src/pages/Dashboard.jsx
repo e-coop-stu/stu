@@ -1,276 +1,185 @@
-// src/pages/Dashboard.jsx
-import React, { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import React, { useEffect, useMemo, useState } from "react";
+import Topbar from "../components/Topbar";
+import Card from "../components/Card";
 import { useAuth } from "../context/AuthContext";
 import { db } from "../lib/firebase";
-import {
-  collection,
-  query,
-  where,
-  orderBy,
-  limit,
-  getDocs,
-} from "firebase/firestore";
+import { collection, query, where, orderBy, getDocs, limit } from "firebase/firestore";
+
+function toDate(ts) {
+  return ts?.toDate ? ts.toDate() : null;
+}
+
+function fmtTime(ts) {
+  const d = toDate(ts);
+  return d ? d.toLocaleString("zh-TW") : "-";
+}
+
+function isSameMonth(d, now) {
+  return d && d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+}
 
 export default function Dashboard() {
   const { user, student } = useAuth();
-  const [recentOrders, setRecentOrders] = useState([]);
-  const [faceStatus, setFaceStatus] = useState("loading");
+  const [loading, setLoading] = useState(true);
+  const [recent, setRecent] = useState([]);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!user) return;
+    let alive = true;
 
-    (async () => {
-      // 最近三筆消費
-      try {
-        const q = query(
-          collection(db, "orders"),
-          where("uid", "==", user.uid),
-          orderBy("createdAt", "desc"),
-          limit(3)
-        );
-        const snap = await getDocs(q);
-        setRecentOrders(
-          snap.docs.map((d) => ({ id: d.id, ...d.data() }))
-        );
-      } catch (e) {
-        console.warn("load orders error:", e);
-      }
+    async function load() {
+      setLoading(true);
+      setError("");
 
-      // Face ID 狀態
       try {
-        const fq = query(
-          collection(db, "face_enrollments"),
-          where("uid", "==", user.uid),
-          orderBy("createdAt", "desc"),
-          limit(1)
-        );
-        const fsnap = await getDocs(fq);
-        if (fsnap.empty) {
-          setFaceStatus("none");
-        } else {
-          const doc = fsnap.docs[0].data();
-          setFaceStatus(doc.status || "unknown");
+        if (!user?.uid) {
+          if (alive) {
+            setRecent([]);
+            setLoading(false);
+          }
+          return;
         }
+
+        // ✅ 穩定查法：who = `${uid}-${timestamp}`
+        // 不用 createdAt 排序（避免 index 問題），回來後前端自己排序
+        const prefix = `${user.uid}-`;
+        const q = query(
+          collection(db, "checkout_requests"),
+          where("who", ">=", prefix),
+          where("who", "<", prefix + "\uf8ff"),
+          orderBy("who"),
+          limit(80)
+        );
+
+        const snap = await getDocs(q);
+        const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+        // 前端排序：createdAt 新到舊
+        list.sort((a, b) => {
+          const da = toDate(a.createdAt)?.getTime() ?? 0;
+          const dbb = toDate(b.createdAt)?.getTime() ?? 0;
+          return dbb - da;
+        });
+
+        if (alive) setRecent(list.slice(0, 10));
       } catch (e) {
-        console.warn("load face status error:", e);
-        setFaceStatus("unknown");
+        const msg = e?.message || String(e);
+        if (alive) setError(msg.includes("index") ? "需要索引（Index）或稍後再試" : msg);
+      } finally {
+        if (alive) setLoading(false);
       }
-    })();
+    }
+
+    load();
+    return () => {
+      alive = false;
+    };
   }, [user?.uid]);
 
-  const balance = student?.balance ?? 0;
-  const name = user?.email?.split("@")[0] || "同學";
+  const stats = useMemo(() => {
+    const now = new Date();
+    const all = recent; // 這裡用 recent 做統計（已經是最新一批資料）
 
-  const faceStatusText = {
-    none: "尚未註冊",
-    pending: "待系統訓練中",
-    ready: "已啟用，可使用 Face ID 付款",
-    no_face: "照片無法辨識，請重新上傳",
-    unknown: "狀態不明",
-    loading: "載入中…",
-  }[faceStatus] || "狀態不明";
+    const monthTotal = all.reduce((sum, r) => {
+      const d = toDate(r.createdAt);
+      if (!isSameMonth(d, now)) return sum;
+      return sum + Number(r.total ?? 0);
+    }, 0);
 
-  const faceStatusColor =
-    faceStatus === "ready"
-      ? "#16a34a"
-      : faceStatus === "pending"
-      ? "#eab308"
-      : faceStatus === "no_face"
-      ? "#dc2626"
-      : "#6b7280";
+    const monthCount = all.reduce((cnt, r) => {
+      const d = toDate(r.createdAt);
+      return cnt + (isSameMonth(d, now) ? 1 : 0);
+    }, 0);
+
+    return { monthTotal, monthCount };
+  }, [recent]);
 
   return (
-    <div className="card" style={{ maxWidth: 960, margin: "0 auto" }}>
-      {/* 歡迎 + 餘額 */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0,2fr) minmax(0,1.4fr)",
-          gap: 20,
-          marginBottom: 12,
-        }}
-      >
-        <div>
-          <div className="muted" style={{ fontSize: 14 }}>
-            歡迎回來，
-          </div>
-          <h1
-            style={{
-              margin: "4px 0 8px",
-              fontSize: 24,
-              fontWeight: 700,
-            }}
-          >
-            {name} 👋
-          </h1>
-          <p className="muted" style={{ fontSize: 14, marginTop: 0 }}>
-            這裡可以查看你的餘額、消費紀錄與 Face ID 狀態，並快速前往購物。
-          </p>
+    <>
+      <Topbar />
 
-          <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
-            <Link to="/shop" className="btn primary">
-              前往商品頁
-            </Link>
-            <Link to="/orders" className="btn ghost">
-              查看消費紀錄
-            </Link>
-          </div>
-        </div>
-
-        {/* 餘額卡片 */}
-        <div
-          style={{
-            borderRadius: 16,
-            padding: 16,
-            background:
-              "radial-gradient(circle at top left,#bbf7d0,#16a34a)",
-            color: "#f9fafb",
-            boxShadow: "0 18px 40px rgba(22,163,74,0.45)",
-          }}
-        >
-          <div style={{ fontSize: 13, opacity: 0.9 }}>目前餘額</div>
-          <div
-            style={{
-              fontSize: 28,
-              fontWeight: 700,
-              marginTop: 6,
-              marginBottom: 12,
-            }}
-          >
-            $ {balance}
-          </div>
-          <div style={{ fontSize: 12, opacity: 0.9 }}>
-            若餘額不足，請至合作社櫃檯儲值。
-          </div>
-        </div>
-      </div>
-
-      {/* Face ID 狀態 + 最近消費 */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0,1.4fr) minmax(0,1.6fr)",
-          gap: 20,
-          marginTop: 10,
-        }}
-      >
-        {/* Face ID 卡片 */}
-        <div
-          style={{
-            borderRadius: 14,
-            border: "1px solid var(--border)",
-            padding: 14,
-          }}
-        >
-          <div
-            style={{
-              fontWeight: 600,
-              marginBottom: 6,
-              fontSize: 15,
-            }}
-          >
-            Face ID 狀態
-          </div>
-          <div
-            style={{
-              fontSize: 13,
-              color: faceStatusColor,
-              fontWeight: 600,
-              marginBottom: 6,
-            }}
-          >
-            {faceStatusText}
-          </div>
-          <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>
-            上傳清楚的正臉照片，系統訓練完成後即可在實體合作社使用
-            Face ID 付款。
-          </p>
-          <Link to="/face-enroll" className="btn ghost">
-            管理 Face ID
-          </Link>
-        </div>
-
-        {/* 最近消費 */}
-        <div
-          style={{
-            borderRadius: 14,
-            border: "1px solid var(--border)",
-            padding: 14,
-          }}
-        >
-          <div
-            style={{
-              fontWeight: 600,
-              marginBottom: 8,
-              fontSize: 15,
-            }}
-          >
-            最近消費
-          </div>
-          {recentOrders.length === 0 ? (
-            <div className="muted" style={{ fontSize: 13 }}>
-              尚無消費紀錄，快去逛逛商品吧！
+      <div style={{ maxWidth: 1100, margin: "0 auto", padding: 24 }}>
+        <div style={{ display: "grid", gap: 14 }}>
+          <Card>
+            <h1 style={{ fontSize: 28, marginBottom: 8 }}>首頁</h1>
+            <div className="muted" style={{ fontSize: 14 }}>
+              已登入：{user?.email || "-"}
+              {typeof student?.balance === "number" && (
+                <span style={{ marginLeft: 10 }}>｜ 錢包餘額：NT$ {student.balance}</span>
+              )}
             </div>
-          ) : (
-            <div style={{ display: "grid", gap: 8 }}>
-              {recentOrders.map((o) => {
-                const time =
-                  o.createdAt?.toDate?.().toLocaleString?.() || "";
-                const total = o.total ?? 0;
-                const firstName =
-                  o.items?.[0]?.name || "購物紀錄";
-                const count =
-                  (o.items?.length || 0) > 1
-                    ? `等 ${o.items.length} 項商品`
-                    : "";
-                return (
+          </Card>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 14 }}>
+            <Card>
+              <div className="muted" style={{ fontSize: 13 }}>本月消費金額</div>
+              <div style={{ fontSize: 26, fontWeight: 900, marginTop: 6 }}>
+                NT$ {stats.monthTotal}
+              </div>
+            </Card>
+
+            <Card>
+              <div className="muted" style={{ fontSize: 13 }}>本月消費筆數</div>
+              <div style={{ fontSize: 26, fontWeight: 900, marginTop: 6 }}>
+                {stats.monthCount} 筆
+              </div>
+            </Card>
+
+            <Card>
+              <div className="muted" style={{ fontSize: 13 }}>最近同步狀態</div>
+              <div style={{ fontSize: 16, fontWeight: 900, marginTop: 10 }}>
+                {loading ? "載入中…" : error ? "讀取失敗" : "正常"}
+              </div>
+              {error && <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>{error}</div>}
+            </Card>
+          </div>
+
+          <Card>
+            <h2 style={{ fontSize: 18, marginBottom: 10 }}>最近消費</h2>
+
+            {loading && <div className="muted">載入中…</div>}
+
+            {!loading && !error && recent.length === 0 && (
+              <div className="muted">尚無消費紀錄。</div>
+            )}
+
+            {!loading && !error && recent.length > 0 && (
+              <div style={{ display: "grid", gap: 10 }}>
+                {recent.map((r) => (
                   <div
-                    key={o.id}
+                    key={r.id}
                     style={{
-                      padding: 8,
-                      borderRadius: 10,
-                      border: "1px solid #e5e7eb",
-                      background: "#f9fafb",
+                      border: "1px solid #eee",
+                      borderRadius: 14,
+                      padding: 12,
+                      background: "#fff",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: 12,
                     }}
                   >
-                    <div
-                      style={{
-                        fontSize: 14,
-                        fontWeight: 500,
-                        marginBottom: 2,
-                      }}
-                    >
-                      {firstName} {count}
+                    <div>
+                      <div style={{ fontWeight: 900 }}>
+                        NT$ {Number(r.total ?? 0)}
+                        <span className="muted" style={{ fontWeight: 700, marginLeft: 8 }}>
+                          {r.method ? `(${r.method})` : ""}
+                        </span>
+                      </div>
+                      <div className="muted" style={{ fontSize: 13 }}>
+                        {fmtTime(r.createdAt)} ｜ 狀態：{r.status ?? "-"}
+                      </div>
                     </div>
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        fontSize: 12,
-                        color: "#6b7280",
-                      }}
-                    >
-                      <span>{time}</span>
-                      <span>-$ {total}</span>
+                    <div className="muted" style={{ fontSize: 13 }}>
+                      {Array.isArray(r.items) ? `${r.items.length} 項` : ""}
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          )}
-
-          <div style={{ marginTop: 10 }}>
-            <Link
-              to="/orders"
-              className="btn ghost"
-              style={{ fontSize: 12, padding: "6px 10px" }}
-            >
-              查看全部紀錄
-            </Link>
-          </div>
+                ))}
+              </div>
+            )}
+          </Card>
         </div>
       </div>
-    </div>
+    </>
   );
 }
