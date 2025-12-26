@@ -1,12 +1,8 @@
 // src/context/AuthContext.jsx
-import React, {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-} from "react";
+import React, { createContext, useContext, useEffect, useState } from "react";
 import {
   GoogleAuthProvider,
+  signInWithPopup,
   signInWithRedirect,
   getRedirectResult,
   createUserWithEmailAndPassword,
@@ -15,16 +11,18 @@ import {
   onAuthStateChanged,
 } from "firebase/auth";
 import { auth, db } from "../lib/firebase";
-import {
-  doc,
-  getDoc,
-  setDoc,
-  serverTimestamp,
-} from "firebase/firestore";
+import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { Navigate } from "react-router-dom";
 
 const AuthContext = createContext(null);
 
-// 🔹 取得 / 建立 students/{uid} 的學生資料（含餘額）
+/** 判斷是否在 GitHub Pages（建議一律用 redirect 避免 popup 卡住） */
+function isGitHubPages() {
+  const h = window.location.hostname;
+  return h.endsWith("github.io");
+}
+
+/** 取得 / 建立 students/{uid} 的學生資料（含餘額） */
 async function ensureStudentDoc(user) {
   if (!user) return null;
 
@@ -34,7 +32,7 @@ async function ensureStudentDoc(user) {
   if (!snap.exists()) {
     const data = {
       email: user.email || "",
-      balance: 0, // 初始餘額
+      balance: 0,
       createdAt: serverTimestamp(),
     };
     await setDoc(ref, data);
@@ -45,53 +43,42 @@ async function ensureStudentDoc(user) {
 }
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);        // Firebase Auth 使用者
-  const [student, setStudent] = useState(null);  // Firestore students/{uid} 資料（含 balance）
+  const [user, setUser] = useState(null);
+  const [student, setStudent] = useState(null);
   const [initializing, setInitializing] = useState(true);
 
-  // 監聽登入狀態 + 處理 Redirect 結果
-  // useEffect 裡面這段，改成下面這樣，多加 console.log
-useEffect(() => {
-  console.log("[Auth] useEffect mount");
+  useEffect(() => {
+    // ✅ 讓 redirect 登入回來後能正確完成流程（GitHub Pages 必備）
+    getRedirectResult(auth).catch((e) => {
+      // 沒有 redirect 事件時，Firebase 有時會拋這個，忽略即可
+      if (e?.code !== "auth/no-auth-event") {
+        console.warn("[Auth] getRedirectResult error:", e);
+      }
+    });
 
-  getRedirectResult(auth).then((res) => {
-    if (res) {
-      console.log("[Auth] getRedirectResult success:", res.user?.email);
-    } else {
-      console.log("[Auth] getRedirectResult: no redirect result");
-    }
-  }).catch((e) => {
-    if (e?.code !== "auth/no-auth-event") {
-      console.warn("[Auth] redirect result error:", e);
-    }
-  });
+    const unsub = onAuthStateChanged(auth, (u) => {
+      (async () => {
+        setUser(u || null);
 
-  const unsub = onAuthStateChanged(auth, (u) => {
-    console.log("[Auth] onAuthStateChanged user:", u?.email || null);
-
-    (async () => {
-      setUser(u || null);
-
-      if (u) {
-        try {
-          const stu = await ensureStudentDoc(u);
-          setStudent(stu);
-        } catch (err) {
-          console.warn("[Auth] load student doc error:", err);
+        if (u) {
+          try {
+            const stu = await ensureStudentDoc(u);
+            setStudent(stu);
+          } catch (err) {
+            console.warn("[Auth] ensureStudentDoc error:", err);
+            setStudent(null);
+          }
+        } else {
           setStudent(null);
         }
-      } else {
-        setStudent(null);
-      }
 
-      setInitializing(false);
-    })();
-  });
+        setInitializing(false);
+      })();
+    });
 
-  return () => unsub();
-}, []);
+    return () => unsub();
+  }, []);
 
-  // ✅ 專門手動重新抓一次 students/{uid}（之後如果有「儲值」功能可以呼叫這個）
   async function refreshStudent() {
     if (!user) {
       setStudent(null);
@@ -102,7 +89,6 @@ useEffect(() => {
     return stu;
   }
 
-  // 帳號密碼註冊
   async function signup(email, password) {
     const cred = await createUserWithEmailAndPassword(auth, email, password);
     const u = cred.user;
@@ -114,7 +100,6 @@ useEffect(() => {
     return u;
   }
 
-  // 帳號密碼登入
   async function login(email, password) {
     const cred = await signInWithEmailAndPassword(auth, email, password);
     const u = cred.user;
@@ -126,68 +111,72 @@ useEffect(() => {
     return u;
   }
 
-  // 登出
   async function logout() {
     await signOut(auth);
     setUser(null);
     setStudent(null);
   }
 
-  // 🔹 Google 登入：全部改走 redirect，避免 popup / COOP 問題
-  // 🔹 Google 登入：只用 redirect + 把錯誤往外丟，讓畫面可以看到
+  /** ✅ Google 登入：GitHub Pages → redirect；localhost → popup */
   async function loginWithGoogle() {
     const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: "select_account" });
 
-    try {
-      console.log("[Auth] starting Google signInWithRedirect");
+    // GitHub Pages 上 popup 容易卡（COOP/第三方 cookie/彈窗限制），直接用 redirect 最穩
+    if (isGitHubPages()) {
       await signInWithRedirect(auth, provider);
-      // 這行之後通常不會被執行，因為頁面會直接跳到 Google
+      return;
+    }
+
+    // 本機開發：先 popup，真的被擋再 fallback redirect
+    try {
+      const cred = await signInWithPopup(auth, provider);
+      const u = cred.user;
+      setUser(u);
+
+      const stu = await ensureStudentDoc(u);
+      setStudent(stu);
+
+      return u;
     } catch (e) {
-      console.error("[Auth] Google redirect error:", e);
-      // 把錯誤丟回去讓 Login 頁面顯示
+      const popupIssues = [
+        "auth/operation-not-supported-in-this-environment",
+        "auth/popup-blocked",
+        "auth/popup-closed-by-user",
+      ];
+      if (popupIssues.includes(e?.code)) {
+        await signInWithRedirect(auth, provider);
+        return;
+      }
       throw e;
     }
   }
 
   const value = {
-    user,           // Firebase 使用者
-    student,        // Firestore 的學生資料（balance 在這裡）
+    user,
+    student,
     initializing,
     signup,
     login,
     logout,
     loginWithGoogle,
-    refreshStudent, // 之後如果餘額被合作社端改了，可以呼叫它重新抓資料
+    refreshStudent,
   };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {
   const ctx = useContext(AuthContext);
-  if (!ctx) {
-    throw new Error("useAuth() must be used inside <AuthProvider>");
-  }
+  if (!ctx) throw new Error("useAuth() must be used inside <AuthProvider>");
   return ctx;
 }
-
-// 路由保護：沒登入就跳轉到 /login
-import { Navigate } from "react-router-dom";
 
 export function RequireAuth({ children }) {
   const { user, initializing } = useAuth();
 
-  if (initializing) {
-    return <div style={{ padding: 20 }}>載入中…</div>;
-  }
-
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
+  if (initializing) return <div style={{ padding: 20 }}>載入中…</div>;
+  if (!user) return <Navigate to="/login" replace />;
 
   return children;
 }

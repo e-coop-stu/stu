@@ -51,7 +51,6 @@ async function onUpload() {
     const user = auth.currentUser;
     const uid = user.uid;
     const time = Date.now();
-
     const displayName = user.displayName || "未命名";
     const email = user.email || "";
 

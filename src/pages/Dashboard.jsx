@@ -1,9 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
-import Topbar from "../components/Topbar";
 import Card from "../components/Card";
 import { useAuth } from "../context/AuthContext";
 import { db } from "../lib/firebase";
-import { collection, query, where, orderBy, getDocs, limit } from "firebase/firestore";
+import { collection, query, where, getDocs, limit } from "firebase/firestore";
 
 function toDate(ts) {
   return ts?.toDate ? ts.toDate() : null;
@@ -40,16 +39,8 @@ export default function Dashboard() {
           return;
         }
 
-        // ✅ 穩定查法：who = `${uid}-${timestamp}`
-        // 不用 createdAt 排序（避免 index 問題），回來後前端自己排序
-        const prefix = `${user.uid}-`;
-        const q = query(
-          collection(db, "checkout_requests"),
-          where("who", ">=", prefix),
-          where("who", "<", prefix + "\uf8ff"),
-          orderBy("who"),
-          limit(80)
-        );
+        // 讀取 orders/{userId=*}；不排序避免觸發複合索引，回來後前端自己依 createdAt 排序
+        const q = query(collection(db, "orders"), where("userId", "==", user.uid), limit(80));
 
         const snap = await getDocs(q);
         const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -96,8 +87,6 @@ export default function Dashboard() {
 
   return (
     <>
-      <Topbar />
-
       <div style={{ maxWidth: 1100, margin: "0 auto", padding: 24 }}>
         <div style={{ display: "grid", gap: 14 }}>
           <Card>

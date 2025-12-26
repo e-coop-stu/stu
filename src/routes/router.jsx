@@ -6,24 +6,18 @@ import Layout from "../components/Layout";
 import Dashboard from "../pages/Dashboard";
 import Shop from "../pages/Shop";
 import Cart from "../pages/Cart";
-import Orders from "../pages/Orders";
+import Orders from "../pages/Orders"; // ✅ 消費紀錄頁
 import Login from "../pages/Login";
 import FaceEnroll from "../pages/FaceEnroll";
 import { RequireAuth } from "../context/AuthContext";
 
 export const router = createHashRouter([
-  // 登入頁（不包在 Layout 裡）
-  {
-    path: "/login",
-    element: <Login />,
-  },
+  { path: "/login", element: <Login /> },
 
-  // 主框架
   {
     path: "/",
     element: <Layout />,
     children: [
-      // 首頁 → 儀表板，需要登入
       {
         index: true,
         element: (
@@ -33,13 +27,8 @@ export const router = createHashRouter([
         ),
       },
 
-      // 商品頁（可不登入就看）
-      {
-        path: "shop",
-        element: <Shop />,
-      },
+      { path: "shop", element: <Shop /> },
 
-      // 購物車（需登入）
       {
         path: "cart",
         element: (
@@ -49,7 +38,7 @@ export const router = createHashRouter([
         ),
       },
 
-      // 消費紀錄（需登入）
+      // ✅ 原本的 /orders 仍然保留
       {
         path: "orders",
         element: (
@@ -59,7 +48,16 @@ export const router = createHashRouter([
         ),
       },
 
-      // Face ID 註冊（需登入）
+      // ✅ 新增 /records 也指向同一頁，避免你 Topbar 點到 records 就 404
+      {
+        path: "records",
+        element: (
+          <RequireAuth>
+            <Orders />
+          </RequireAuth>
+        ),
+      },
+
       {
         path: "face-enroll",
         element: (
@@ -71,9 +69,5 @@ export const router = createHashRouter([
     ],
   },
 
-  // 404
-  {
-    path: "*",
-    element: <div style={{ padding: 20 }}>404 找不到此頁</div>,
-  },
+  { path: "*", element: <div style={{ padding: 20 }}>404 找不到此頁</div> },
 ]);

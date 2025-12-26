@@ -192,3 +192,51 @@ export async function getOrderByPickupCode(pickupCode) {
   const d = snap.docs[0];
   return { id: d.id, ...d.data() };
 }
+// ✅ 寫入消費紀錄到 checkout_requests（學生端自己也可寫入）
+export async function createCheckoutRecord({
+  userId,
+  items,
+  total,
+  method = "Web",
+  status = "verified",
+  source = "stu_web",
+}) {
+  if (!userId) throw new Error("缺少 userId");
+  if (!Array.isArray(items) || items.length === 0) throw new Error("缺少 items");
+  const t = Number(total ?? 0);
+  if (!Number.isFinite(t) || t <= 0) throw new Error("total 不正確");
+
+  const ref = doc(collection(db, "checkout_requests"));
+
+  // ✅ who 用 uid-時間戳，方便之後做前綴查詢/排序
+  const who = `${userId}-${Date.now()}`;
+
+  // items 正規化
+  const normItems = items
+    .map((it) => ({
+      productId: it.productId ?? it.product?.id ?? "",
+      name: it.name ?? it.product?.name ?? "",
+      price: Number(it.price ?? it.product?.price ?? 0),
+      qty: Number(it.qty ?? 0),
+      lineTotal:
+        Number(it.lineTotal ?? 0) ||
+        Number(it.price ?? it.product?.price ?? 0) * Number(it.qty ?? 0),
+      sku: it.sku ?? "",
+    }))
+    .filter((x) => x.productId && x.qty > 0);
+
+  if (!normItems.length) throw new Error("items 內容不正確");
+
+  await setDoc(ref, {
+    userId,
+    who,
+    items: normItems,
+    total: t,
+    method,
+    status,
+    source,
+    createdAt: serverTimestamp(),
+  });
+
+  return { id: ref.id };
+}

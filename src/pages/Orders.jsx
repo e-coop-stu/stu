@@ -1,121 +1,149 @@
-// src/pages/Orders.jsx
 import React, { useEffect, useState } from "react";
-import { db } from "../lib/firebase";
+import Card from "../components/Card";
 import { useAuth } from "../context/AuthContext";
-import {
-  collection,
-  query,
-  where,
-  orderBy,
-  getDocs,
-} from "firebase/firestore";
+import { db } from "../lib/firebase";
+import { collection, query, where, getDocs, limit } from "firebase/firestore";
+
+function fmtTime(ts) {
+  if (!ts?.toDate) return "-";
+  return ts.toDate().toLocaleString("zh-TW");
+}
 
 export default function Orders() {
   const { user } = useAuth();
-  const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [rows, setRows] = useState([]);
+  const [error, setError] = useState("");
+
+  const projectId = db?.app?.options?.projectId || "-";
+  const authDomain = db?.app?.options?.authDomain || "-";
+  const uid = user?.uid || "-";
+  const email = user?.email || "-";
 
   useEffect(() => {
-    if (!user) return;
+    let alive = true;
 
-    (async () => {
+    async function load() {
       setLoading(true);
+      setError("");
+      setRows([]);
+
       try {
-        const q = query(
-          collection(db, "orders"),
-          where("uid", "==", user.uid),
-          orderBy("createdAt", "desc")
-        );
+        if (!user?.uid) {
+          if (alive) setLoading(false);
+          return;
+        }
+
+        // 不用 orderBy，避免需要建立複合索引；資料回來後再前端排序
+        const q = query(collection(db, "orders"), where("userId", "==", user.uid), limit(100));
+
         const snap = await getDocs(q);
-        setOrders(
-          snap.docs.map((d) => ({ id: d.id, ...d.data() }))
-        );
+        const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+        list.sort((a, b) => {
+          const ta = a?.createdAt?.toMillis?.() ?? 0;
+          const tb = b?.createdAt?.toMillis?.() ?? 0;
+          return tb - ta;
+        });
+
+        if (alive) setRows(list);
       } catch (e) {
-        console.warn("load orders error:", e);
+        if (alive) setError(e?.message || String(e));
       } finally {
-        setLoading(false);
+        if (alive) setLoading(false);
       }
-    })();
+    }
+
+    load();
+    return () => (alive = false);
   }, [user?.uid]);
 
-  if (!user) {
-    return <div style={{ padding: 20 }}>請先登入。</div>;
-  }
+  const empty = !loading && !error && rows.length === 0;
 
   return (
-    <div className="card" style={{ maxWidth: 800, margin: "0 auto" }}>
-      <h1 style={{ marginTop: 0, marginBottom: 8 }}>消費紀錄</h1>
-      <p className="muted" style={{ marginTop: 0 }}>
-        顯示你在合作社的消費歷史。合作社端或刷臉系統完成扣款後，可以在這裡看到紀錄。
-      </p>
+    <>
+      <div style={{ maxWidth: 900, margin: "0 auto", padding: 24 }}>
+        <Card>
+          <h1 style={{ fontSize: 28, marginBottom: 8 }}>消費紀錄</h1>
 
-      {loading ? (
-        <div style={{ marginTop: 16 }}>載入中…</div>
-      ) : orders.length === 0 ? (
-        <div style={{ marginTop: 16 }} className="muted">
-          尚無消費紀錄。
-        </div>
-      ) : (
-        <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
-          {orders.map((o) => {
-            const time =
-              o.createdAt?.toDate?.().toLocaleString?.() || "";
-            const itemsText =
-              o.items?.map?.((it) => it.name).join("、") || "購物";
-            const total = o.total ?? 0;
-            const method =
-              o.payMethod === "face"
-                ? "Face ID"
-                : o.payMethod || "未知";
+          <div className="muted" style={{ fontSize: 13, marginBottom: 12 }}>
+            Firebase：{projectId} ｜ {authDomain}
+            <br />
+            登入：{email}
+            <br />
+            uid：{uid}
+          </div>
 
-            return (
-              <div
-                key={o.id}
-                style={{
-                  borderRadius: 12,
-                  border: "1px solid #e5e7eb",
-                  padding: 10,
-                  background: "#f9fafb",
-                }}
-              >
+          {loading && <p className="muted">載入中…</p>}
+
+          {error && (
+            <div style={{ padding: 12, borderRadius: 12, background: "#fff3f3" }}>
+              <b>讀取失敗：</b> {error}
+            </div>
+          )}
+
+          {empty && (
+            <div className="muted">
+              尚無消費紀錄。<br />
+              ✅ 如果 Firebase Console 有資料但這裡看不到，請確認文件的 userId 是否等於目前登入 UID。
+            </div>
+          )}
+
+          {!loading && !error && rows.length > 0 && (
+            <div style={{ display: "grid", gap: 14 }}>
+              {rows.map((r) => (
                 <div
+                  key={r.id}
                   style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    marginBottom: 4,
+                    border: "1px solid #e8e8e8",
+                    borderRadius: 14,
+                    padding: 16,
+                    background: "white",
                   }}
                 >
-                  <div
-                    style={{ fontWeight: 500, fontSize: 14 }}
-                  >
-                    {itemsText}
+                  <div style={{ marginBottom: 6, fontWeight: 800 }}>
+                    消費金額：NT$ {r.total ?? 0}
                   </div>
-                  <div
-                    style={{
-                      fontWeight: 600,
-                      color: "#dc2626",
-                      fontSize: 14,
-                    }}
-                  >
-                    -$ {total}
+
+                  <div className="muted" style={{ fontSize: 13 }}>
+                    {fmtTime(r.createdAt)}
+                  </div>
+
+                  <div className="muted" style={{ fontSize: 13 }}>
+                    狀態：{r.status ?? "-"} ｜ 方式：{r.method ?? "-"}
+                  </div>
+
+                  {Array.isArray(r.items) && r.items.length > 0 && (
+                    <div style={{ marginTop: 10 }}>
+                      <div className="muted" style={{ fontSize: 13, marginBottom: 6 }}>
+                        明細
+                      </div>
+                      <div style={{ display: "grid", gap: 6 }}>
+                        {r.items.map((it, idx) => (
+                          <div key={idx} style={{ display: "flex", justifyContent: "space-between" }}>
+                            <div>
+                              {it.name ?? it.productId ?? "商品"}{" "}
+                              <span className="muted">x{it.qty ?? 1}</span>
+                            </div>
+                            <div className="muted">
+                              NT${" "}
+                              {it.lineTotal ?? Number(it.price ?? 0) * Number(it.qty ?? 1)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>
+                    docId：{r.id}
                   </div>
                 </div>
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    fontSize: 12,
-                    color: "#6b7280",
-                  }}
-                >
-                  <span>{time}</span>
-                  <span>付款方式：{method}</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      </div>
+    </>
   );
 }
