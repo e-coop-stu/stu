@@ -1,149 +1,166 @@
-import React, { useEffect, useState } from "react";
+// src/pages/Orders.jsx
+import React, { useEffect, useMemo, useState } from "react";
 import Card from "../components/Card";
 import { useAuth } from "../context/AuthContext";
-import { db } from "../lib/firebase";
-import { collection, query, where, getDocs, limit } from "firebase/firestore";
+import { fetchMyPaidOrders } from "../services/orders";
+import { Timestamp } from "firebase/firestore";
+import { NavLink } from "react-router-dom";
 
 function fmtTime(ts) {
-  if (!ts?.toDate) return "-";
-  return ts.toDate().toLocaleString("zh-TW");
+  if (!ts) return "";
+  const d = ts instanceof Timestamp ? ts.toDate() : new Date(ts);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${y}/${m}/${dd} ${hh}:${mm}`;
 }
 
 export default function Orders() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [rows, setRows] = useState([]);
-  const [error, setError] = useState("");
-
-  const projectId = db?.app?.options?.projectId || "-";
-  const authDomain = db?.app?.options?.authDomain || "-";
-  const uid = user?.uid || "-";
-  const email = user?.email || "-";
+  const [err, setErr] = useState("");
+  const [orders, setOrders] = useState([]);
 
   useEffect(() => {
     let alive = true;
 
-    async function load() {
+    async function run() {
+      if (!user?.uid) {
+        setOrders([]);
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
-      setError("");
-      setRows([]);
+      setErr("");
 
       try {
-        if (!user?.uid) {
-          if (alive) setLoading(false);
-          return;
-        }
-
-        // 不用 orderBy，避免需要建立複合索引；資料回來後再前端排序
-        const q = query(collection(db, "orders"), where("userId", "==", user.uid), limit(100));
-
-        const snap = await getDocs(q);
-        const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-
-        list.sort((a, b) => {
-          const ta = a?.createdAt?.toMillis?.() ?? 0;
-          const tb = b?.createdAt?.toMillis?.() ?? 0;
-          return tb - ta;
-        });
-
-        if (alive) setRows(list);
+        const list = await fetchMyPaidOrders(user.uid, { pageSize: 50 });
+        if (!alive) return;
+        setOrders(list);
       } catch (e) {
-        if (alive) setError(e?.message || String(e));
+        console.error(e);
+        if (!alive) return;
+        setErr(e?.message || "載入失敗");
       } finally {
-        if (alive) setLoading(false);
+        if (!alive) return;
+        setLoading(false);
       }
     }
 
-    load();
-    return () => (alive = false);
+    run();
+    return () => {
+      alive = false;
+    };
   }, [user?.uid]);
 
-  const empty = !loading && !error && rows.length === 0;
+  const totalSpent = useMemo(
+    () => orders.reduce((sum, o) => sum + (Number(o.total) || 0), 0),
+    [orders]
+  );
 
   return (
-    <>
-      <div style={{ maxWidth: 900, margin: "0 auto", padding: 24 }}>
-        <Card>
-          <h1 style={{ fontSize: 28, marginBottom: 8 }}>消費紀錄</h1>
+    <div>
+      <Card style={{ marginBottom: 12 }}>
+        <h1 style={{ margin: 0 }}>消費紀錄</h1>
+        <div className="muted" style={{ marginTop: 8 }}>
+          這裡只顯示 <b>付款成功（paid）</b> 的訂單。
+          <span style={{ marginLeft: 8 }}>
+            <NavLink to="/records">去看預訂紀錄</NavLink>
+          </span>
+        </div>
 
-          <div className="muted" style={{ fontSize: 13, marginBottom: 12 }}>
-            Firebase：{projectId} ｜ {authDomain}
-            <br />
-            登入：{email}
-            <br />
-            uid：{uid}
+        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 12 }}>
+          <div>
+            <div className="muted">近 50 筆</div>
+            <div style={{ fontSize: 22, fontWeight: 900 }}>{orders.length} 筆</div>
           </div>
+          <div style={{ textAlign: "right" }}>
+            <div className="muted">合計消費</div>
+            <div style={{ fontSize: 22, fontWeight: 900 }}>${totalSpent}</div>
+          </div>
+        </div>
+      </Card>
 
-          {loading && <p className="muted">載入中…</p>}
-
-          {error && (
-            <div style={{ padding: 12, borderRadius: 12, background: "#fff3f3" }}>
-              <b>讀取失敗：</b> {error}
-            </div>
-          )}
-
-          {empty && (
-            <div className="muted">
-              尚無消費紀錄。<br />
-              ✅ 如果 Firebase Console 有資料但這裡看不到，請確認文件的 userId 是否等於目前登入 UID。
-            </div>
-          )}
-
-          {!loading && !error && rows.length > 0 && (
-            <div style={{ display: "grid", gap: 14 }}>
-              {rows.map((r) => (
-                <div
-                  key={r.id}
-                  style={{
-                    border: "1px solid #e8e8e8",
-                    borderRadius: 14,
-                    padding: 16,
-                    background: "white",
-                  }}
-                >
-                  <div style={{ marginBottom: 6, fontWeight: 800 }}>
-                    消費金額：NT$ {r.total ?? 0}
-                  </div>
-
-                  <div className="muted" style={{ fontSize: 13 }}>
-                    {fmtTime(r.createdAt)}
-                  </div>
-
-                  <div className="muted" style={{ fontSize: 13 }}>
-                    狀態：{r.status ?? "-"} ｜ 方式：{r.method ?? "-"}
-                  </div>
-
-                  {Array.isArray(r.items) && r.items.length > 0 && (
-                    <div style={{ marginTop: 10 }}>
-                      <div className="muted" style={{ fontSize: 13, marginBottom: 6 }}>
-                        明細
-                      </div>
-                      <div style={{ display: "grid", gap: 6 }}>
-                        {r.items.map((it, idx) => (
-                          <div key={idx} style={{ display: "flex", justifyContent: "space-between" }}>
-                            <div>
-                              {it.name ?? it.productId ?? "商品"}{" "}
-                              <span className="muted">x{it.qty ?? 1}</span>
-                            </div>
-                            <div className="muted">
-                              NT${" "}
-                              {it.lineTotal ?? Number(it.price ?? 0) * Number(it.qty ?? 1)}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>
-                    docId：{r.id}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+      {!user && (
+        <Card>
+          <div style={{ fontWeight: 800 }}>請先登入</div>
+          <div className="muted" style={{ marginTop: 6 }}>
+            登入後才可以看到你的消費紀錄。
+          </div>
         </Card>
-      </div>
-    </>
+      )}
+
+      {user && loading && <Card>載入中…</Card>}
+
+      {user && !loading && err && (
+        <Card>
+          <div className="text-error" style={{ fontWeight: 800 }}>
+            讀取失敗
+          </div>
+          <div className="muted" style={{ marginTop: 6 }}>
+            {err}
+          </div>
+        </Card>
+      )}
+
+      {user && !loading && !err && orders.length === 0 && (
+        <Card>
+          <div style={{ fontWeight: 800 }}>目前沒有付款成功的消費紀錄</div>
+          <div className="muted" style={{ marginTop: 6 }}>
+            如果你只有預訂成功，請到 <NavLink to="/records">預訂紀錄</NavLink> 查看。
+          </div>
+        </Card>
+      )}
+
+      {user &&
+        !loading &&
+        !err &&
+        orders.map((o) => (
+          <Card key={o.id}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+              <div>
+                <div style={{ fontWeight: 900 }}>
+                  訂單 #{o.id.slice(0, 6).toUpperCase()}
+                </div>
+                <div className="muted" style={{ marginTop: 4 }}>
+                  {fmtTime(o.createdAt)} ・ 狀態：{o.status || "unknown"} ・ 方式：
+                  {o.paymentMethod || "-"}
+                </div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div className="muted">消費金額</div>
+                <div style={{ fontSize: 18, fontWeight: 900 }}>
+                  NT$ {Number(o.total) || 0}
+                </div>
+              </div>
+            </div>
+
+            {Array.isArray(o.items) && o.items.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <div className="muted" style={{ marginBottom: 6 }}>明細</div>
+                {o.items.map((it, idx) => (
+                  <div
+                    key={idx}
+                    style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}
+                  >
+                    <div>
+                      {it.name || it.title || it.productName || "商品"}{" "}
+                      <span className="muted">x{it.qty ?? it.count ?? 1}</span>
+                    </div>
+                    <div className="muted">NT$ {Number(it.price) || 0}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="muted" style={{ marginTop: 10 }}>
+              docId：{o.id}
+            </div>
+          </Card>
+        ))}
+    </div>
   );
 }
