@@ -19,13 +19,14 @@ export default function Layout() {
       : linkStyle;
 
   return (
-    <div className="layout">
+    <div className="layout-root">
       <header className="nav">
         <NavLink to="/" style={active}>首頁</NavLink>
         <NavLink to="/shop" style={active}>商品頁</NavLink>
         <NavLink to="/cart" style={active}>購物車</NavLink>
         <NavLink to="/face-enroll" style={active}>Face ID</NavLink>
         <NavLink to="/orders" style={active}>消費紀錄</NavLink>
+        <NavLink to="/records" style={active}>預訂紀錄</NavLink>
 
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
           {user ? (

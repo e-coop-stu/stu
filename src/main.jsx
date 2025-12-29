@@ -7,14 +7,13 @@ import "./index.css";
 
 import { AuthProvider } from "./context/AuthContext";
 import { CartProvider } from "./context/CartContext";
-import { startInventoryHeartbeat } from "./services/store";
 
-// 每分鐘清除逾時訂單
-startInventoryHeartbeat(60 * 1000);
+// ❌ 先不要在 main 啟動 heartbeat（會亂寫 Firestore）
+// import { startInventoryHeartbeat } from "./services/store";
+// startInventoryHeartbeat(60 * 1000);
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    {/* 🔥 全站外框：讓你的網站變漂亮 */}
     <div className="app-shell">
       <AuthProvider>
         <CartProvider>
