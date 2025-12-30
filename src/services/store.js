@@ -81,7 +81,7 @@ export async function reserveCart({ userId, items }) {
           pickupCode,
           items: normItems,
           total,
-          status: "reserved",
+          status: "pending",
           createdAt: serverTimestamp(),
           expiresAt,
         });
