@@ -28,7 +28,7 @@ export async function fetchMyReservedOrders(uid, { pageSize = 50 } = {}) {
   const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
   return rows
-    .filter((r) => r.status === "pending")
+    .filter((r) => r.status === "reserved")
     .sort((a, b) => toMillis(b.createdAt) - toMillis(a.createdAt))
     .slice(0, pageSize);
 }
